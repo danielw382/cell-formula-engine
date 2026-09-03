@@ -18,6 +18,7 @@ const (
 	tokLParen
 	tokRParen
 	tokComma
+	tokColon
 )
 
 type token struct {
@@ -45,7 +46,7 @@ func (l *lexer) next() (token, error) {
 	c := l.src[l.pos]
 	single := map[byte]tokenKind{
 		'+': tokPlus, '-': tokMinus, '*': tokStar, '/': tokSlash,
-		'(': tokLParen, ')': tokRParen, ',': tokComma,
+		'(': tokLParen, ')': tokRParen, ',': tokComma, ':': tokColon,
 	}
 	if kind, ok := single[c]; ok {
 		l.pos++

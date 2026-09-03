@@ -18,6 +18,9 @@ type callNode struct {
 	name string
 	args []node
 }
+type rangeNode struct {
+	from, to string
+}
 
 type parser struct {
 	lex *lexer
@@ -126,6 +129,22 @@ func (p *parser) parseIdent() (node, error) {
 	}
 	if !looksLikeRef(name) {
 		return nil, fmt.Errorf("formula: %q is not a valid cell reference", name)
+	}
+	if p.cur.kind == tokColon {
+		if err := p.advance(); err != nil {
+			return nil, err
+		}
+		if p.cur.kind != tokIdent {
+			return nil, fmt.Errorf("formula: expected cell reference after :")
+		}
+		to := p.cur.text
+		if !looksLikeRef(to) {
+			return nil, fmt.Errorf("formula: %q is not a valid cell reference", to)
+		}
+		if err := p.advance(); err != nil {
+			return nil, err
+		}
+		return rangeNode{from: name, to: to}, nil
 	}
 	return cellNode{ref: name}, nil
 }

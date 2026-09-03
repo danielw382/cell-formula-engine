@@ -16,9 +16,13 @@ turn a formula string plus a map of cell values into a number.
 - Arithmetic: `+ - * /`, parentheses, unary minus
 - Cell references: `A1`, `B12`, `AA7`
 - Function calls over a plain argument list: `SUM(...)`, `AVERAGE(...)`
+- Cell ranges as function arguments: `SUM(A1:A3)`, `AVERAGE(A1:B3,D1)`
 - A leading `=` is optional, so you can feed it raw user input either way
 
-Cell ranges (`A1:B3`) aren't supported yet — see Roadmap below.
+A range can only appear as a function argument, not as a standalone
+expression — `=A1:A3` parses fine but fails at evaluation time. Cells
+inside a range that aren't in the sheet are skipped rather than treated as
+an error, the same way a blank cell in Excel doesn't break `SUM`.
 
 ## Usage
 
@@ -44,7 +48,7 @@ func main() {
 	}
 	fmt.Println(total) // 245
 
-	avg, err := formula.Evaluate("AVERAGE(A1,A2,A3)", sheet)
+	avg, err := formula.Evaluate("AVERAGE(A1:A3)", sheet)
 	if err != nil {
 		panic(err)
 	}
@@ -74,7 +78,6 @@ needed yet, so the API doesn't expose it.
 
 ## Roadmap
 
-- Range support (`SUM(A1:B3)`)
 - `MIN`, `MAX`, `COUNT`
 - String and boolean values, comparison operators
 - A parsed-formula type so repeated evaluation skips re-parsing

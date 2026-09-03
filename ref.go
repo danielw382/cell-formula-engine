@@ -22,3 +22,24 @@ func looksLikeRef(s string) bool {
 	_, _, err := splitRef(s)
 	return err == nil
 }
+
+// colIndex converts a column letter sequence (A, B, ..., Z, AA, AB, ...) to a
+// 1-based number, matching spreadsheet column ordering.
+func colIndex(letters string) int {
+	n := 0
+	for i := 0; i < len(letters); i++ {
+		n = n*26 + int(letters[i]-'A'+1)
+	}
+	return n
+}
+
+// colName is the inverse of colIndex.
+func colName(n int) string {
+	var buf []byte
+	for n > 0 {
+		n--
+		buf = append([]byte{byte('A' + n%26)}, buf...)
+		n /= 26
+	}
+	return string(buf)
+}
