@@ -80,11 +80,15 @@ func evalCall(c callNode, sheet Sheet) (float64, error) {
 	if err != nil {
 		return 0, err
 	}
+	name := strings.ToUpper(c.name)
+	if name == "COUNT" {
+		return float64(len(values)), nil
+	}
 	var total float64
 	for _, v := range values {
 		total += v
 	}
-	switch strings.ToUpper(c.name) {
+	switch name {
 	case "SUM":
 		return total, nil
 	case "AVERAGE":
@@ -92,6 +96,28 @@ func evalCall(c callNode, sheet Sheet) (float64, error) {
 			return 0, fmt.Errorf("formula: AVERAGE needs at least one value")
 		}
 		return total / float64(len(values)), nil
+	case "MIN":
+		if len(values) == 0 {
+			return 0, fmt.Errorf("formula: MIN needs at least one value")
+		}
+		m := values[0]
+		for _, v := range values[1:] {
+			if v < m {
+				m = v
+			}
+		}
+		return m, nil
+	case "MAX":
+		if len(values) == 0 {
+			return 0, fmt.Errorf("formula: MAX needs at least one value")
+		}
+		m := values[0]
+		for _, v := range values[1:] {
+			if v > m {
+				m = v
+			}
+		}
+		return m, nil
 	default:
 		return 0, fmt.Errorf("formula: unknown function %s", c.name)
 	}
