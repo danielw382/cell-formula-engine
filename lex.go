@@ -19,6 +19,12 @@ const (
 	tokRParen
 	tokComma
 	tokColon
+	tokEq
+	tokNe
+	tokLt
+	tokGt
+	tokLe
+	tokGe
 )
 
 type token struct {
@@ -47,10 +53,31 @@ func (l *lexer) next() (token, error) {
 	single := map[byte]tokenKind{
 		'+': tokPlus, '-': tokMinus, '*': tokStar, '/': tokSlash,
 		'(': tokLParen, ')': tokRParen, ',': tokComma, ':': tokColon,
+		'=': tokEq,
 	}
 	if kind, ok := single[c]; ok {
 		l.pos++
 		return token{kind: kind, text: string(c)}, nil
+	}
+	if c == '<' {
+		l.pos++
+		if l.pos < len(l.src) && l.src[l.pos] == '=' {
+			l.pos++
+			return token{kind: tokLe, text: "<="}, nil
+		}
+		if l.pos < len(l.src) && l.src[l.pos] == '>' {
+			l.pos++
+			return token{kind: tokNe, text: "<>"}, nil
+		}
+		return token{kind: tokLt, text: "<"}, nil
+	}
+	if c == '>' {
+		l.pos++
+		if l.pos < len(l.src) && l.src[l.pos] == '=' {
+			l.pos++
+			return token{kind: tokGe, text: ">="}, nil
+		}
+		return token{kind: tokGt, text: ">"}, nil
 	}
 	switch {
 	case isDigit(c) || c == '.':

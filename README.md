@@ -15,8 +15,9 @@ turn a formula string plus a map of cell values into a number.
 
 - Arithmetic: `+ - * /`, parentheses, unary minus
 - Cell references: `A1`, `B12`, `AA7`
-- Function calls over a plain argument list: `SUM(...)`, `AVERAGE(...)`
+- Function calls over a plain argument list: `SUM(...)`, `AVERAGE(...)`, `MIN(...)`, `MAX(...)`, `COUNT(...)`
 - Cell ranges as function arguments: `SUM(A1:A3)`, `AVERAGE(A1:B3,D1)`
+- Comparison operators `= <> < > <= >=` and the `TRUE`/`FALSE` literals
 - A leading `=` is optional, so you can feed it raw user input either way
 
 A range can only appear as a function argument, not as a standalone
@@ -59,6 +60,12 @@ func main() {
 		panic(err)
 	}
 	fmt.Println(pct) // 50
+
+	over, err := formula.Evaluate("=A1>100", sheet)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(over) // TRUE
 }
 ```
 
@@ -66,6 +73,15 @@ func main() {
 in the map is an evaluation error, not a zero — that's deliberate, since a
 silent zero for a typo'd reference is exactly the kind of bug this library
 is meant to catch before it reaches a report.
+
+`Evaluate` returns a `formula.Value` rather than a bare `float64`, because a
+formula built from comparison operators or the `TRUE`/`FALSE` literals
+produces a bool, not a number. `Value` prints sensibly via `fmt` on its own;
+call `.Number()` or `.Bool()` to get the underlying value plus an `ok` flag
+for the type you expected. Mixing types in arithmetic (`=A1+TRUE`) or in `<
+> <= >=` (`=TRUE>A1`) is an evaluation error — `=` and `<>` are the only
+operators that accept a bool on either side, comparing it against a number
+always comes out unequal.
 
 ## Design
 
@@ -78,6 +94,5 @@ needed yet, so the API doesn't expose it.
 
 ## Roadmap
 
-- `MIN`, `MAX`, `COUNT`
-- String and boolean values, comparison operators
+- String values
 - A parsed-formula type so repeated evaluation skips re-parsing

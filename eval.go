@@ -9,80 +9,183 @@ import (
 // Sheet holds known cell values by reference, e.g. "A1" -> 12.5.
 type Sheet map[string]float64
 
+type valueKind int
+
+const (
+	kindNumber valueKind = iota
+	kindBool
+)
+
+// Value is the result of evaluating a formula. Arithmetic always produces a
+// number; comparison operators (=, <>, <, >, <=, >=) and the TRUE/FALSE
+// literals produce a bool instead, so the result can't just be a float64.
+type Value struct {
+	kind valueKind
+	num  float64
+	b    bool
+}
+
+func numberValue(n float64) Value { return Value{kind: kindNumber, num: n} }
+func boolValue(b bool) Value      { return Value{kind: kindBool, b: b} }
+
+// IsBool reports whether v holds a boolean rather than a number.
+func (v Value) IsBool() bool { return v.kind == kindBool }
+
+// Number returns v's numeric value and true, or 0 and false if v holds a
+// bool instead.
+func (v Value) Number() (float64, bool) { return v.num, v.kind == kindNumber }
+
+// Bool returns v's boolean value and true, or false and false if v holds a
+// number instead.
+func (v Value) Bool() (bool, bool) { return v.b, v.kind == kindBool }
+
+func (v Value) String() string {
+	if v.kind == kindBool {
+		if v.b {
+			return "TRUE"
+		}
+		return "FALSE"
+	}
+	return strconv.FormatFloat(v.num, 'g', -1, 64)
+}
+
 // Evaluate parses and computes a formula against sheet. A leading "=" is optional.
-func Evaluate(formula string, sheet Sheet) (float64, error) {
+func Evaluate(formula string, sheet Sheet) (Value, error) {
 	src := strings.TrimPrefix(strings.TrimSpace(formula), "=")
 	n, err := parseExpr(src)
 	if err != nil {
-		return 0, err
+		return Value{}, err
 	}
 	return eval(n, sheet)
 }
 
-func eval(n node, sheet Sheet) (float64, error) {
+func eval(n node, sheet Sheet) (Value, error) {
 	switch v := n.(type) {
 	case numberNode:
-		return v.val, nil
+		return numberValue(v.val), nil
+	case boolNode:
+		return boolValue(v.val), nil
 	case cellNode:
 		val, ok := sheet[v.ref]
 		if !ok {
-			return 0, fmt.Errorf("formula: cell %s has no value", v.ref)
+			return Value{}, fmt.Errorf("formula: cell %s has no value", v.ref)
 		}
-		return val, nil
+		return numberValue(val), nil
 	case unaryNode:
 		operand, err := eval(v.operand, sheet)
 		if err != nil {
-			return 0, err
+			return Value{}, err
+		}
+		num, ok := operand.Number()
+		if !ok {
+			return Value{}, fmt.Errorf("formula: %s is not a number", operand)
 		}
 		if v.op == tokMinus {
-			return -operand, nil
+			return numberValue(-num), nil
 		}
-		return operand, nil
+		return numberValue(num), nil
 	case binaryNode:
 		return evalBinary(v, sheet)
 	case callNode:
 		return evalCall(v, sheet)
 	case rangeNode:
-		return 0, fmt.Errorf("formula: range %s:%s can only be used as a function argument", v.from, v.to)
+		return Value{}, fmt.Errorf("formula: range %s:%s can only be used as a function argument", v.from, v.to)
 	default:
-		return 0, fmt.Errorf("formula: unknown expression")
+		return Value{}, fmt.Errorf("formula: unknown expression")
 	}
 }
 
-func evalBinary(v binaryNode, sheet Sheet) (float64, error) {
+func evalBinary(v binaryNode, sheet Sheet) (Value, error) {
 	left, err := eval(v.left, sheet)
 	if err != nil {
-		return 0, err
+		return Value{}, err
 	}
 	right, err := eval(v.right, sheet)
 	if err != nil {
-		return 0, err
+		return Value{}, err
 	}
 	switch v.op {
-	case tokPlus:
-		return left + right, nil
-	case tokMinus:
-		return left - right, nil
-	case tokStar:
-		return left * right, nil
-	case tokSlash:
-		if right == 0 {
-			return 0, fmt.Errorf("formula: division by zero")
+	case tokPlus, tokMinus, tokStar, tokSlash:
+		ln, ok := left.Number()
+		if !ok {
+			return Value{}, fmt.Errorf("formula: %s is not a number", left)
 		}
-		return left / right, nil
+		rn, ok := right.Number()
+		if !ok {
+			return Value{}, fmt.Errorf("formula: %s is not a number", right)
+		}
+		return evalArith(v.op, ln, rn)
+	case tokEq:
+		return boolValue(valuesEqual(left, right)), nil
+	case tokNe:
+		return boolValue(!valuesEqual(left, right)), nil
+	case tokLt, tokLe, tokGt, tokGe:
+		ln, ok := left.Number()
+		if !ok {
+			return Value{}, fmt.Errorf("formula: %s is not a number", left)
+		}
+		rn, ok := right.Number()
+		if !ok {
+			return Value{}, fmt.Errorf("formula: %s is not a number", right)
+		}
+		return evalCompare(v.op, ln, rn), nil
 	default:
-		return 0, fmt.Errorf("formula: unknown operator")
+		return Value{}, fmt.Errorf("formula: unknown operator")
 	}
 }
 
-func evalCall(c callNode, sheet Sheet) (float64, error) {
+func evalArith(op tokenKind, l, r float64) (Value, error) {
+	switch op {
+	case tokPlus:
+		return numberValue(l + r), nil
+	case tokMinus:
+		return numberValue(l - r), nil
+	case tokStar:
+		return numberValue(l * r), nil
+	case tokSlash:
+		if r == 0 {
+			return Value{}, fmt.Errorf("formula: division by zero")
+		}
+		return numberValue(l / r), nil
+	default:
+		return Value{}, fmt.Errorf("formula: unknown operator")
+	}
+}
+
+func evalCompare(op tokenKind, l, r float64) Value {
+	switch op {
+	case tokLt:
+		return boolValue(l < r)
+	case tokLe:
+		return boolValue(l <= r)
+	case tokGt:
+		return boolValue(l > r)
+	default: // tokGe
+		return boolValue(l >= r)
+	}
+}
+
+// valuesEqual compares by kind first: a number and a bool are never equal,
+// the same way Excel treats 1 and TRUE as different for the = operator even
+// though it happily coerces TRUE to 1 in arithmetic.
+func valuesEqual(a, b Value) bool {
+	if a.kind != b.kind {
+		return false
+	}
+	if a.kind == kindBool {
+		return a.b == b.b
+	}
+	return a.num == b.num
+}
+
+func evalCall(c callNode, sheet Sheet) (Value, error) {
 	values, err := evalArgs(c.args, sheet)
 	if err != nil {
-		return 0, err
+		return Value{}, err
 	}
 	name := strings.ToUpper(c.name)
 	if name == "COUNT" {
-		return float64(len(values)), nil
+		return numberValue(float64(len(values))), nil
 	}
 	var total float64
 	for _, v := range values {
@@ -90,15 +193,15 @@ func evalCall(c callNode, sheet Sheet) (float64, error) {
 	}
 	switch name {
 	case "SUM":
-		return total, nil
+		return numberValue(total), nil
 	case "AVERAGE":
 		if len(values) == 0 {
-			return 0, fmt.Errorf("formula: AVERAGE needs at least one value")
+			return Value{}, fmt.Errorf("formula: AVERAGE needs at least one value")
 		}
-		return total / float64(len(values)), nil
+		return numberValue(total / float64(len(values))), nil
 	case "MIN":
 		if len(values) == 0 {
-			return 0, fmt.Errorf("formula: MIN needs at least one value")
+			return Value{}, fmt.Errorf("formula: MIN needs at least one value")
 		}
 		m := values[0]
 		for _, v := range values[1:] {
@@ -106,10 +209,10 @@ func evalCall(c callNode, sheet Sheet) (float64, error) {
 				m = v
 			}
 		}
-		return m, nil
+		return numberValue(m), nil
 	case "MAX":
 		if len(values) == 0 {
-			return 0, fmt.Errorf("formula: MAX needs at least one value")
+			return Value{}, fmt.Errorf("formula: MAX needs at least one value")
 		}
 		m := values[0]
 		for _, v := range values[1:] {
@@ -117,9 +220,9 @@ func evalCall(c callNode, sheet Sheet) (float64, error) {
 				m = v
 			}
 		}
-		return m, nil
+		return numberValue(m), nil
 	default:
-		return 0, fmt.Errorf("formula: unknown function %s", c.name)
+		return Value{}, fmt.Errorf("formula: unknown function %s", c.name)
 	}
 }
 
@@ -142,7 +245,11 @@ func evalArgs(args []node, sheet Sheet) ([]float64, error) {
 		if err != nil {
 			return nil, err
 		}
-		values = append(values, v)
+		n, ok := v.Number()
+		if !ok {
+			return nil, fmt.Errorf("formula: %s is not a number", v)
+		}
+		values = append(values, n)
 	}
 	return values, nil
 }

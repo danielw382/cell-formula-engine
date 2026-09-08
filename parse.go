@@ -5,6 +5,7 @@ import "fmt"
 type node interface{}
 
 type numberNode struct{ val float64 }
+type boolNode struct{ val bool }
 type cellNode struct{ ref string }
 type binaryNode struct {
 	op          tokenKind
@@ -41,7 +42,13 @@ func (p *parser) advance() error {
 	return nil
 }
 
-var precedence = map[tokenKind]int{tokPlus: 1, tokMinus: 1, tokStar: 2, tokSlash: 2}
+// Comparisons bind loosest, then +/-, then */÷ — the same ordering Excel
+// uses so that e.g. A1+A2>B1 means (A1+A2)>B1.
+var precedence = map[tokenKind]int{
+	tokEq: 1, tokNe: 1, tokLt: 1, tokGt: 1, tokLe: 1, tokGe: 1,
+	tokPlus: 2, tokMinus: 2,
+	tokStar: 3, tokSlash: 3,
+}
 
 func parseExpr(src string) (node, error) {
 	p, err := newParser(src)
@@ -123,6 +130,12 @@ func (p *parser) parseIdent() (node, error) {
 	name := p.cur.text
 	if err := p.advance(); err != nil {
 		return nil, err
+	}
+	switch name {
+	case "TRUE":
+		return boolNode{val: true}, nil
+	case "FALSE":
+		return boolNode{val: false}, nil
 	}
 	if p.cur.kind == tokLParen {
 		return p.parseCall(name)
