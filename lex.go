@@ -25,6 +25,7 @@ const (
 	tokGt
 	tokLe
 	tokGe
+	tokString
 )
 
 type token struct {
@@ -78,6 +79,19 @@ func (l *lexer) next() (token, error) {
 			return token{kind: tokGe, text: ">="}, nil
 		}
 		return token{kind: tokGt, text: ">"}, nil
+	}
+	if c == '"' {
+		l.pos++
+		start := l.pos
+		for l.pos < len(l.src) && l.src[l.pos] != '"' {
+			l.pos++
+		}
+		if l.pos >= len(l.src) {
+			return token{}, fmt.Errorf("formula: unterminated string literal")
+		}
+		text := l.src[start:l.pos]
+		l.pos++
+		return token{kind: tokString, text: text}, nil
 	}
 	switch {
 	case isDigit(c) || c == '.':

@@ -14,39 +14,54 @@ type valueKind int
 const (
 	kindNumber valueKind = iota
 	kindBool
+	kindString
 )
 
 // Value is the result of evaluating a formula. Arithmetic always produces a
 // number; comparison operators (=, <>, <, >, <=, >=) and the TRUE/FALSE
-// literals produce a bool instead, so the result can't just be a float64.
+// literals produce a bool instead, and string literals produce a string, so
+// the result can't just be a float64.
 type Value struct {
 	kind valueKind
 	num  float64
 	b    bool
+	str  string
 }
 
 func numberValue(n float64) Value { return Value{kind: kindNumber, num: n} }
 func boolValue(b bool) Value      { return Value{kind: kindBool, b: b} }
+func stringValue(s string) Value  { return Value{kind: kindString, str: s} }
 
-// IsBool reports whether v holds a boolean rather than a number.
+// IsBool reports whether v holds a boolean rather than a number or string.
 func (v Value) IsBool() bool { return v.kind == kindBool }
 
+// IsString reports whether v holds a string rather than a number or bool.
+func (v Value) IsString() bool { return v.kind == kindString }
+
 // Number returns v's numeric value and true, or 0 and false if v holds a
-// bool instead.
+// bool or string instead.
 func (v Value) Number() (float64, bool) { return v.num, v.kind == kindNumber }
 
 // Bool returns v's boolean value and true, or false and false if v holds a
-// number instead.
+// number or string instead.
 func (v Value) Bool() (bool, bool) { return v.b, v.kind == kindBool }
 
+// Text returns v's string value and true, or "" and false if v holds a
+// number or bool instead.
+func (v Value) Text() (string, bool) { return v.str, v.kind == kindString }
+
 func (v Value) String() string {
-	if v.kind == kindBool {
+	switch v.kind {
+	case kindBool:
 		if v.b {
 			return "TRUE"
 		}
 		return "FALSE"
+	case kindString:
+		return v.str
+	default:
+		return strconv.FormatFloat(v.num, 'g', -1, 64)
 	}
-	return strconv.FormatFloat(v.num, 'g', -1, 64)
 }
 
 // Evaluate parses and computes a formula against sheet. A leading "=" is optional.
@@ -65,6 +80,8 @@ func eval(n node, sheet Sheet) (Value, error) {
 		return numberValue(v.val), nil
 	case boolNode:
 		return boolValue(v.val), nil
+	case stringNode:
+		return stringValue(v.val), nil
 	case cellNode:
 		val, ok := sheet[v.ref]
 		if !ok {
@@ -165,17 +182,22 @@ func evalCompare(op tokenKind, l, r float64) Value {
 	}
 }
 
-// valuesEqual compares by kind first: a number and a bool are never equal,
-// the same way Excel treats 1 and TRUE as different for the = operator even
-// though it happily coerces TRUE to 1 in arithmetic.
+// valuesEqual compares by kind first: a number, a bool, and a string are
+// never equal to one another, the same way Excel treats 1 and TRUE as
+// different for the = operator even though it happily coerces TRUE to 1 in
+// arithmetic.
 func valuesEqual(a, b Value) bool {
 	if a.kind != b.kind {
 		return false
 	}
-	if a.kind == kindBool {
+	switch a.kind {
+	case kindBool:
 		return a.b == b.b
+	case kindString:
+		return a.str == b.str
+	default:
+		return a.num == b.num
 	}
-	return a.num == b.num
 }
 
 func evalCall(c callNode, sheet Sheet) (Value, error) {

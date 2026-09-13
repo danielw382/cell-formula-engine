@@ -6,6 +6,7 @@ type node interface{}
 
 type numberNode struct{ val float64 }
 type boolNode struct{ val bool }
+type stringNode struct{ val string }
 type cellNode struct{ ref string }
 type binaryNode struct {
 	op          tokenKind
@@ -106,6 +107,9 @@ func (p *parser) parsePrimary() (node, error) {
 	switch p.cur.kind {
 	case tokNumber:
 		n := numberNode{val: p.cur.num}
+		return n, p.advance()
+	case tokString:
+		n := stringNode{val: p.cur.text}
 		return n, p.advance()
 	case tokLParen:
 		if err := p.advance(); err != nil {

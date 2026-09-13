@@ -18,6 +18,7 @@ turn a formula string plus a map of cell values into a number.
 - Function calls over a plain argument list: `SUM(...)`, `AVERAGE(...)`, `MIN(...)`, `MAX(...)`, `COUNT(...)`
 - Cell ranges as function arguments: `SUM(A1:A3)`, `AVERAGE(A1:B3,D1)`
 - Comparison operators `= <> < > <= >=` and the `TRUE`/`FALSE` literals
+- String literals in double quotes, e.g. `"north region"`
 - A leading `=` is optional, so you can feed it raw user input either way
 
 A range can only appear as a function argument, not as a standalone
@@ -76,12 +77,13 @@ is meant to catch before it reaches a report.
 
 `Evaluate` returns a `formula.Value` rather than a bare `float64`, because a
 formula built from comparison operators or the `TRUE`/`FALSE` literals
-produces a bool, not a number. `Value` prints sensibly via `fmt` on its own;
-call `.Number()` or `.Bool()` to get the underlying value plus an `ok` flag
-for the type you expected. Mixing types in arithmetic (`=A1+TRUE`) or in `<
-> <= >=` (`=TRUE>A1`) is an evaluation error — `=` and `<>` are the only
-operators that accept a bool on either side, comparing it against a number
-always comes out unequal.
+produces a bool, and a string literal produces a string, not a number.
+`Value` prints sensibly via `fmt` on its own; call `.Number()`, `.Bool()`, or
+`.Text()` to get the underlying value plus an `ok` flag for the type you
+expected. Mixing types in arithmetic (`=A1+TRUE`) or in `< > <= >=`
+(`=TRUE>A1`, `="a">"b"`) is an evaluation error — `=` and `<>` are the only
+operators that accept a bool or string on either side, and comparing across
+kinds (a string against a number, say) always comes out unequal.
 
 ## Design
 
@@ -94,5 +96,5 @@ needed yet, so the API doesn't expose it.
 
 ## Roadmap
 
-- String values
 - A parsed-formula type so repeated evaluation skips re-parsing
+- Table-driven tests covering parser errors and edge cases
